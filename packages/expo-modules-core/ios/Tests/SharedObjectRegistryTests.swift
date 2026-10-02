@@ -158,7 +158,37 @@ struct SharedObjectRegistryTests {
 
     let secondId = registry.add(native: nativeObject, javaScript: try runtime.createObject())
     #expect(secondId != firstId)
+    #expect(secondId != 0)
     #expect(nativeObject.sharedObjectId == secondId)
+  }
+
+  @Test
+  func `re-adding a native object after deletion resolves from the new JS object`() throws {
+    let nativeObject = TestSharedObject()
+    // The first JS object keeps its native state after the deletion, like a frozen object does.
+    let firstJSObject = try runtime.createObject()
+    registry.delete(registry.add(native: nativeObject, javaScript: firstJSObject))
+    let secondJSObject = try runtime.createObject()
+    registry.add(native: nativeObject, javaScript: secondJSObject)
+    let resolved = try SharedObject.native(from: secondJSObject)
+    #expect(resolved === nativeObject)
+    #expect(throws: SharedObject.NotFoundException.self) {
+      _ = try SharedObject.native(from: firstJSObject)
+    }
+  }
+
+  @Test
+  func `encoding a native object after deletion creates a new JS object`() throws {
+    let runtime = try runtime
+    let nativeObject = TestSharedObject()
+    // The first JS object keeps its native state after the deletion, like a frozen object does.
+    let firstJSObject = runtime.createObject()
+    registry.delete(registry.add(native: nativeObject, javaScript: firstJSObject))
+    let encoded = try TestSharedObject.encode(nativeObject, in: runtime).asObject()
+    let isFirstJSObject = encoded.asValue() == firstJSObject.asValue()
+    let resolved = try SharedObject.native(from: encoded)
+    #expect(isFirstJSObject == false)
+    #expect(resolved === nativeObject)
   }
 
   @Test
