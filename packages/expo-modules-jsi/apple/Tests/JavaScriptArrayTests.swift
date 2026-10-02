@@ -431,7 +431,7 @@ struct JavaScriptArrayTests {
     let array = try runtime.eval("['a', 'b', 'c']").getArray()
     var pairs: [(Int, String)] = []
 
-    for (index, value) in array.enumerated() {
+    array.forEach { index, value in
       pairs.append((index, value.getString()))
     }
     #expect(pairs.count == 3)

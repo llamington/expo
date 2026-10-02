@@ -1,7 +1,9 @@
 internal actor DeferredPromise {
+  // The settled value travels through a `JavaScriptValue.Ref`: the continuation and the stored state
+  // both need to hold it, and the reference gives a non-copyable value a shareable owner.
   internal enum State {
-    case pending(CheckedContinuation<JavaScriptValue, any Error>?)
-    case fulfilled(JavaScriptValue)
+    case pending(CheckedContinuation<JavaScriptValue.Ref, any Error>?)
+    case fulfilled(JavaScriptValue.Ref)
     case rejected(JavaScriptError)
   }
 
@@ -9,17 +11,18 @@ internal actor DeferredPromise {
 
   public func getValue() async throws(JavaScriptError) -> sending JavaScriptValue {
     switch state {
-    case .fulfilled(let value):
-      return value
+    case .fulfilled(let ref):
+      return takeValue(from: ref)
 
     case .rejected(let error):
       throw error
 
     case .pending(nil):
       do {
-        return try await withCheckedThrowingContinuation { continuation in
+        let ref = try await withCheckedThrowingContinuation { continuation in
           state = .pending(continuation)
         }
+        return takeValue(from: ref)
       } catch let error as JavaScriptError {
         throw error
       } catch {
@@ -32,14 +35,14 @@ internal actor DeferredPromise {
     }
   }
 
-  internal func resolve(_ value: sending JavaScriptValue) {
+  internal func resolve(_ ref: JavaScriptValue.Ref) {
     switch state {
     case .pending(let continuation?):
-      continuation.resume(returning: value)
-      state = .fulfilled(value)
+      continuation.resume(returning: ref)
+      state = .fulfilled(ref)
 
     case .pending(nil):
-      state = .fulfilled(value)
+      state = .fulfilled(ref)
 
     default:
       break
@@ -58,5 +61,15 @@ internal actor DeferredPromise {
     default:
       break
     }
+  }
+
+  /// Moves the value out of the reference. The reference is shared between the continuation and
+  /// the stored state, and the value may only be delivered once; a second `getValue()` on a settled
+  /// promise is a programmer error, like awaiting a pending promise twice.
+  private func takeValue(from ref: JavaScriptValue.Ref) -> sending JavaScriptValue {
+    guard let value = ref.take() else {
+      preconditionFailure("Promise awaited more than once")
+    }
+    return value
   }
 }

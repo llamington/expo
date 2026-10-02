@@ -92,7 +92,7 @@ struct JavaScriptCodableSharedObjectTests {
     let runtime = try runtime
     let native = CodableSharedObject()
     let encoded = try CodableSharedObject.encode(native, in: runtime)
-    let buffer = JavaScriptValuesBuffer.copying(in: runtime, values: [encoded])
+    let buffer = JavaScriptValuesBuffer.copying(in: runtime, values: [encoded.refToValue()])
 
     let decoded = try CodableSharedObject.decode(buffer.unownedValue(at: 0), in: runtime)
 
